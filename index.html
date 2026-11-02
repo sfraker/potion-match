@@ -1,0 +1,852 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Water Match</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one-screen arcade board — HUD shelf on top, bottle rack in the middle, booster tray pinned at the bottom */
+:root{
+  --night:#121122; --night-2:#1e1c38; --shelf:#262443; --violet:#6b4fd8; --violet-hi:#9b82ff; --violet-lo:#3d2a92;
+  --gold:#ffc93c; --cream:#fff0c8; --ink:#3a1f12; --glass:rgba(48,196,214,.62); --glass-fill:linear-gradient(180deg,rgba(120,150,210,.2),rgba(18,26,64,.55) 32%);
+  --qmark:#5f6cff; --text:#f4f0ff; --muted:#aaa3dc; --cork:#b97a45; --ice:#d9f1ff;
+  --font-display:"Baloo 2","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif;
+  --font-body:"Nunito",system-ui,-apple-system,sans-serif;
+  --lift:12px; color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background-color:var(--night);color:var(--text);font-family:var(--font-body);overflow:hidden;
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  background-image:conic-gradient(from 45deg,rgba(255,255,255,.03) 0 25%,transparent 0 50%,rgba(255,255,255,.03) 0 75%,transparent 0);
+  background-size:96px 96px}
+.app{height:100%;max-width:560px;margin:0 auto;display:flex;flex-direction:column;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px 12px;box-sizing:border-box}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible,.slot:focus-visible{outline:3px solid var(--gold);outline-offset:3px;border-radius:12px}
+
+/* HUD */
+.hud{display:flex;align-items:center;gap:10px}
+.pill{display:flex;align-items:center;gap:6px;background:var(--cream);color:var(--ink);font-family:var(--font-display);font-weight:800;
+  font-size:20px;line-height:1;height:34px;padding:0 14px 0 4px;border-radius:999px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12);font-variant-numeric:tabular-nums}
+.coin{width:28px;height:28px;flex:none}
+.level{flex:1;display:flex;justify-content:center}
+.level span{background:var(--night-2);border:3px solid var(--gold);color:#fff;font-family:var(--font-display);font-weight:800;font-size:20px;
+  padding:2px 18px 0;border-radius:999px;box-shadow:0 3px 0 rgba(0,0,0,.35);white-space:nowrap}
+.gear{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 40% 35%,var(--violet-hi),var(--violet) 60%,var(--violet-lo));
+  border:3px solid var(--gold);display:grid;place-items:center;flex:none}
+.gear svg{width:22px;height:22px}
+.shelf{margin-top:8px;background:linear-gradient(var(--shelf),var(--night-2));border-radius:12px;padding:6px 10px 4px;
+  display:flex;flex-wrap:wrap;justify-content:center;gap:4px 6px;box-shadow:inset 0 -4px 0 rgba(0,0,0,.25)}
+.shelf svg{width:18px;height:22px;transition:transform .3s}
+.shelf svg.fresh{animation:bagIn .6s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bagIn{from{transform:translateY(-14px) scale(.4)}}
+.shelf-label{width:100%;text-align:center;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:800}
+
+/* Board */
+.board{flex:1;min-height:0;display:flex;flex-wrap:wrap;justify-content:center;align-content:center;align-items:flex-end;
+  column-gap:var(--gx,8px);row-gap:var(--gy,18px);padding-top:calc(var(--lift) + 8px)}
+.cell{width:var(--cw);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px}
+.slot{position:relative;cursor:pointer}
+.bottle.gone{visibility:hidden}
+.slot:has(.gone){pointer-events:none}
+.bottle{position:relative;width:var(--bw);display:flex;flex-direction:column;align-items:center;transition:transform .18s ease;will-change:transform}
+.bottle.selected{transform:translateY(calc(-1 * var(--lift)))}
+.bottle.selected:not(.flying){filter:drop-shadow(0 0 6px rgba(255,214,90,.75)) drop-shadow(0 0 2px rgba(255,236,170,.9))}
+.neck{position:relative;width:calc(var(--bw)*.44);height:calc(var(--bw)*.22);border:2px solid var(--glass);border-bottom:0;
+  border-radius:3px 3px 0 0;background:var(--glass-fill);box-sizing:border-box;z-index:1}
+.neck::before{content:"";position:absolute;left:-32%;right:-32%;top:calc(var(--bw)*-.18);height:calc(var(--bw)*.38);border-radius:50%;
+  background:linear-gradient(180deg,rgba(120,170,225,.8) 0%,rgba(225,248,255,.92) 17%,rgba(120,172,225,.6) 42%,rgba(70,112,180,.68) 60%,rgba(160,212,248,.78) 78%,rgba(32,52,108,.96) 100%);
+  box-shadow:inset 0 -3px 5px rgba(10,20,60,.55),inset 0 2px 2px rgba(255,255,255,.45),0 2px 4px rgba(0,0,0,.35)}
+.neck::after{content:"";position:absolute;left:7%;right:7%;top:calc(var(--bw)*-.115);height:calc(var(--bw)*.11);border-radius:50%;
+  background:radial-gradient(ellipse at 50% 80%,rgba(40,55,105,.95),rgba(6,8,26,.97) 70%);
+  box-shadow:inset 0 2px 3px rgba(0,0,0,.75),0 1px 0 rgba(235,250,255,.55),0 -1px 0 rgba(20,35,80,.5)}
+.body{position:relative;width:100%;height:calc(var(--cap) * var(--u) + var(--bx));margin-top:-1px;box-sizing:border-box;
+  border:2px solid var(--glass);background:var(--glass-fill);overflow:hidden;
+  border-radius:calc(var(--bw)*.3) calc(var(--bw)*.3) 50% 50% / calc(var(--bw)*.3) calc(var(--bw)*.3) calc(var(--bw)*.17) calc(var(--bw)*.17);box-shadow:0 0 5px rgba(40,190,210,.22)}
+.small .body{border-radius:calc(var(--bw)*.26) calc(var(--bw)*.26) 50% 50% / calc(var(--bw)*.26) calc(var(--bw)*.26) calc(var(--bw)*.17) calc(var(--bw)*.17)}
+.lqc{position:absolute;inset:var(--gt);overflow:hidden;pointer-events:none;
+  border-radius:calc(var(--bw)*.3 - var(--gt)) calc(var(--bw)*.3 - var(--gt)) 50% 50% / calc(var(--bw)*.3 - var(--gt)) calc(var(--bw)*.3 - var(--gt)) calc(var(--bw)*.17 - var(--gt)*.5) calc(var(--bw)*.17 - var(--gt)*.5)}
+.small .lqc{border-radius:calc(var(--bw)*.26 - var(--gt)) calc(var(--bw)*.26 - var(--gt)) 50% 50% / calc(var(--bw)*.26 - var(--gt)) calc(var(--bw)*.26 - var(--gt)) calc(var(--bw)*.17 - var(--gt)*.5) calc(var(--bw)*.17 - var(--gt)*.5)}
+.lq{position:absolute;left:50%;top:50%;pointer-events:none}
+.band{position:absolute;left:0;right:0;background:var(--c)}
+.band.hid{background:#05040d}
+.cap{position:absolute;border-radius:50%;background:var(--c)}
+.cap.hid{background:#05040d}
+.qm{position:absolute;transform:translate(-50%,-50%);font-family:var(--font-display);font-weight:800;color:var(--qmark);
+  font-size:calc(var(--u)*.62);line-height:1;text-shadow:0 0 6px rgba(95,108,255,.5)}
+.surf{position:absolute;border-radius:50%;box-shadow:inset 0 -1.5px 1.5px rgba(255,255,255,.4),inset 0 2px 3px color-mix(in oklab,var(--c) 70%,#000);
+  background:radial-gradient(ellipse 22% 34% at 70% 42%,rgba(255,255,255,.75),rgba(255,255,255,0) 100%),
+    radial-gradient(ellipse 60% 40% at 38% 62%,rgba(255,255,255,.22),rgba(255,255,255,0) 100%),
+    radial-gradient(ellipse 75% 85% at 46% 45%,color-mix(in oklab,var(--c) 58%,#fff),color-mix(in oklab,var(--c) 82%,#fff))}
+.shade{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(0,0,0,.16),rgba(0,0,0,0) 14%,rgba(255,255,255,.09) 30%,rgba(255,255,255,0) 50%,rgba(0,0,0,0) 84%,rgba(0,0,0,.16))}
+.spouting .neck::after{background:linear-gradient(var(--ha,180deg),rgba(6,8,26,.97) var(--hs,100%),var(--pc) var(--hs,100%));box-shadow:0 1px 0 rgba(235,250,255,.55),0 -1px 0 rgba(20,35,80,.5)}
+.nlq{position:absolute;inset:0;overflow:hidden;z-index:-1;pointer-events:none}
+.nrot{position:absolute;left:50%;top:50%}
+.nfill{position:absolute;left:0;right:0;bottom:0}
+.fx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.shine{position:absolute;inset:0;pointer-events:none}
+.shine::after{content:"";position:absolute;right:12%;top:3%;width:24%;height:15%;border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.5),rgba(255,255,255,0))}
+.pour{position:absolute;border-radius:99px;pointer-events:none;
+  background:linear-gradient(90deg,color-mix(in oklab,var(--c) 80%,#000),var(--c) 40%,var(--c) 70%,color-mix(in oklab,var(--c) 85%,#000))}
+.pour.out{position:fixed;z-index:40}
+.neck .pour{z-index:2}
+.foam{position:absolute;border-radius:50%;background:radial-gradient(closest-side,color-mix(in oklab,var(--c) 45%,#fff),color-mix(in oklab,var(--c) 70%,#fff) 60%,transparent)}
+.drop{position:absolute;border-radius:50%;background:color-mix(in oklab,var(--c) 82%,#fff)}
+.bottle.corked .body{border-color:color-mix(in oklab,var(--done) 60%,#fff);box-shadow:0 0 14px color-mix(in oklab,var(--done) 70%,transparent)}
+.cork{position:absolute;top:calc(var(--bw)*-.31);width:calc(var(--bw)*.378);height:calc(var(--bw)*.305);z-index:3;border-radius:50%/calc(var(--bw)*.055);
+  background:linear-gradient(90deg,#6e3f1d,var(--cork) 30%,#d9a06a 48%,var(--cork) 68%,#6e3f1d);box-shadow:inset 0 -2px 2px rgba(0,0,0,.35)}
+.cork::before{content:"";position:absolute;left:0;right:0;top:0;height:calc(var(--bw)*.11);border-radius:50%;
+  background:radial-gradient(ellipse at 50% 45%,#e2b07c,#b47a45 70%,#8d5a2e);box-shadow:inset 0 -1px 0 rgba(255,235,210,.35)}
+.cork.pop{animation:corkPop .5s cubic-bezier(.3,1.7,.5,1)}
+@keyframes corkPop{from{transform:translateY(-26px) scale(1.4);opacity:0}}
+.bottle.shake{animation:shake .35s}
+.bottle.shake-s{animation:shakeS .3s}
+@keyframes shakeS{25%{transform:translateX(-2px)}50%{transform:translateX(2px)}75%{transform:translateX(-1px)}}
+@keyframes shake{20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.bottle.wobble .lq{animation:wob .5s}
+@keyframes wob{30%{transform:scaleX(.9) rotate(-4deg)}60%{transform:scaleX(1.05) rotate(3deg)}}
+.board.picking .bottle.pickable{filter:drop-shadow(0 0 6px rgba(255,214,90,.75)) drop-shadow(0 0 2px rgba(255,236,170,.9))}
+.board.picking .slot{cursor:default}
+.board.picking .slot:has(.pickable){cursor:pointer}
+@keyframes pick{50%{filter:drop-shadow(0 0 8px var(--gold))}}
+
+/* Locks */
+.ice{position:absolute;left:0;top:0;width:100%;height:100%;z-index:4}
+.icesvg{position:absolute;left:0;top:0;overflow:visible;filter:drop-shadow(0 0 5px rgba(170,220,255,.45))}
+.ice .badge{position:absolute;left:50%;transform:translate(-50%,-50%)}
+.shard{transform-box:view-box}
+.ice.shatter{pointer-events:none}
+.ice.shatter .icesvg{animation:iceShake .24s linear}
+.ice.shatter .crk{animation:crk .2s ease-out both}
+.ice.shatter .shard{animation:iceShard .8s var(--d) cubic-bezier(.3,.3,.6,1) both}
+.ice.shatter .badge{animation:badgePop .32s ease-in forwards}
+@keyframes iceShake{25%{transform:translate(-1.5px,.5px)}50%{transform:translate(1.5px,-.5px)}75%{transform:translate(-1px,0)}}
+@keyframes crk{from{opacity:0}}
+@keyframes iceShard{0%{transform:none;opacity:1}
+  30%{transform:translate(calc(var(--dx)*.45),calc(var(--dy)*.7)) rotate(calc(var(--r)*.35));opacity:1}
+  100%{transform:translate(var(--dx),calc(var(--dy) + var(--fall))) rotate(var(--r));opacity:0}}
+@keyframes badgePop{40%{transform:translate(-50%,-50%) scale(1.25)}100%{transform:translate(-50%,-50%) scale(.2);opacity:0}}
+.badge{position:relative;z-index:1;width:calc(var(--bw)*.74);aspect-ratio:1;max-width:100%;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(circle at 40% 35%,color-mix(in oklab,var(--c) 60%,#fff),var(--c) 55%,color-mix(in oklab,var(--c) 60%,#000));
+  border:3px solid #e8f6ff;box-shadow:0 2px 0 rgba(0,0,0,.25);font-family:var(--font-display);font-weight:800;color:#fff;
+  font-size:calc(var(--bw)*.46);line-height:1;padding-top:.08em;box-sizing:border-box;text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.bag{position:absolute;left:-2px;right:-2px;bottom:-3px;top:calc(var(--bw)*.22);z-index:4;display:grid;place-items:center;
+  clip-path:polygon(0 6%,8% 0,18% 5%,30% 0,42% 6%,55% 1%,66% 6%,78% 0,90% 5%,100% 1%,100% 100%,0 100%);
+  background:repeating-linear-gradient(170deg,transparent 0 13px,rgba(0,0,0,.08) 13px 15px),repeating-linear-gradient(80deg,transparent 0 17px,rgba(255,255,255,.08) 17px 19px),
+  linear-gradient(180deg,#c49a68,#9b7244 70%,#87613a);border-radius:4px 4px 8px 8px}
+.tag{width:calc(var(--bw)*.6);padding:6px 0 4px;border-radius:10px;background:#f2f6fb;border:2px solid #6c7a8f;display:grid;place-items:center;
+  font-family:var(--font-display);font-weight:800;color:#3b4252;font-size:calc(var(--bw)*.38);line-height:1;box-shadow:0 2px 0 rgba(0,0,0,.25)}
+.tag small{display:block;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#6c7a8f;font-family:var(--font-body)}
+.bag.tear{animation:tear .7s ease-in forwards;pointer-events:none}
+@keyframes tear{to{opacity:0;transform:translateY(40%) rotate(8deg)}}
+.freelock{position:absolute;left:0;right:0;bottom:0;top:calc(var(--bw)*.34);z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--bw)*.08)}
+.freelock .lockicon{width:calc(var(--bw)*.5);height:calc(var(--bw)*.5);border-radius:8px;background:var(--cream);display:grid;place-items:center;box-shadow:0 2px 0 rgba(0,0,0,.3)}
+.freelock .lockicon svg{width:60%;height:60%}
+.chip{font-family:var(--font-display);font-weight:800;font-size:clamp(9px,calc(var(--bw)*.24),14px);line-height:1;padding:.28em .55em .14em;max-width:100%;box-sizing:border-box;border-width:1.5px!important;border-radius:999px;
+  background:linear-gradient(#5ec3ff,#2d7fe0);border:2px solid #d4efff;color:#fff;text-shadow:0 1px 0 rgba(0,0,0,.3)}
+
+/* Boosters */
+.tray{display:flex;justify-content:center;gap:clamp(16px,7vw,40px);padding-top:8px}
+.boost{display:flex;flex-direction:column;align-items:center;gap:4px;font-weight:800;font-size:12px;color:var(--muted);letter-spacing:.04em}
+.boost .sq{position:relative;width:64px;height:60px;border-radius:16px;display:grid;place-items:center;
+  background:linear-gradient(180deg,var(--violet-hi),var(--violet) 55%,var(--violet-lo));box-shadow:inset 0 -5px 0 rgba(0,0,0,.25),0 4px 0 #241a5e}
+.boost .sq svg{width:34px;height:34px}
+.boost:active .sq{transform:translateY(2px)}
+.boost.active .sq{outline:3px solid var(--gold)}
+.boost .cnt{position:absolute;right:-8px;bottom:-8px;min-width:26px;height:26px;padding:0 5px;box-sizing:border-box;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:2px;
+  background:linear-gradient(#6ad0ff,#2f86e6);border:2px solid #fff;color:#fff;font-family:var(--font-display);font-size:15px;line-height:1;padding-top:2px}
+.boost .cnt.price{background:var(--cream);color:var(--ink);border-color:var(--gold)}
+.boost .cnt svg{width:13px;height:13px;margin-top:-2px}
+
+/* Messages & sheets */
+.toast{position:fixed;left:50%;bottom:calc(120px + env(safe-area-inset-bottom,0px));transform:translate(-50%,10px);opacity:0;transition:.25s;
+  background:rgba(14,12,40,.92);border:1px solid var(--violet);padding:9px 16px;border-radius:12px;font-weight:800;font-size:14px;pointer-events:none;
+  max-width:calc(100% - 48px);text-align:center;z-index:60}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.stuck{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;font-size:13px;color:var(--cream);text-align:center;flex-wrap:wrap}
+.stuck button{background:var(--gold);color:var(--ink);font-family:var(--font-display);font-weight:800;padding:4px 14px 2px;border-radius:999px}
+.veil{position:fixed;inset:0;background:rgba(8,6,28,.72);display:grid;place-items:center;z-index:70;padding:16px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.card{width:min(360px,100%);background:linear-gradient(180deg,#3a2f8a,#251f5c);border:3px solid var(--gold);border-radius:22px;padding:20px;box-sizing:border-box;
+  display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.5);animation:cardIn .35s cubic-bezier(.3,1.5,.5,1);max-height:90%;overflow:auto}
+@keyframes cardIn{from{transform:scale(.85);opacity:0}}
+.card h2{margin:0;font-family:var(--font-display);font-weight:800;font-size:30px;line-height:1.05;text-align:center;text-wrap:balance}
+.card p{margin:0;color:var(--muted);font-size:14px;line-height:1.45}
+.big{font-family:var(--font-display);font-weight:800;font-size:20px;padding:10px 0 6px;border-radius:14px;background:linear-gradient(#ffd866,#f2a91b);color:var(--ink);box-shadow:inset 0 -4px 0 rgba(0,0,0,.18)}
+.plain{font-weight:800;padding:10px;border-radius:12px;background:rgba(255,255,255,.08)}
+.hold{position:relative;overflow:hidden;touch-action:none;-webkit-touch-callout:none}
+.hold::before{content:"";position:absolute;inset:0;background:rgba(255,201,60,.38);transform:scaleX(0);transform-origin:left}
+.hold.on::before{transform:scaleX(1);transition:transform 3s linear}
+.hold span{position:relative}
+.big.hold::before{background:rgba(120,60,0,.28)}
+.tag.tick{animation:tick .4s}
+.buy{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+.buy-icon{grid-column:1/-1;justify-self:center;position:relative;width:92px;height:84px;border-radius:22px;display:grid;place-items:center;
+  background:linear-gradient(180deg,var(--violet-hi),var(--violet) 55%,var(--violet-lo));box-shadow:inset 0 -6px 0 rgba(0,0,0,.25)}
+.buy-icon svg{width:52px;height:52px}
+.buy-icon span,.gift span{position:absolute;right:-10px;bottom:-8px;font-family:var(--font-display);font-weight:800;font-size:20px;line-height:1;
+  padding:5px 8px 2px;border-radius:10px;background:linear-gradient(#6ad0ff,#2f86e6);border:2px solid #fff;color:#fff}
+.buy-btn,.buy-alt{display:flex;align-items:center;justify-content:center;gap:6px;font-variant-numeric:tabular-nums}
+.buy-btn svg,.buy-bal svg,.buy-alt svg{width:24px;height:24px}
+.buy-btn[disabled]{filter:grayscale(1);opacity:.55;cursor:not-allowed}
+.buy-bal{grid-column:1/-1;order:3;justify-self:center;display:flex;align-items:center;gap:5px;color:var(--muted);font-weight:800;font-variant-numeric:tabular-nums}
+.buy-no{width:48px;height:48px;padding:0;font-size:20px}
+.buy-alt{font-family:var(--font-display);font-size:18px}
+.buy-alt svg:first-child{width:26px;height:26px;stroke:var(--cream)}
+.buy-alt svg:first-child path{stroke:var(--cream)}
+.pips{display:flex;justify-content:center;gap:8px}
+.pips i{width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.12);box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
+.pips i.on{background:radial-gradient(circle at 40% 35%,#fff3c4,var(--gold) 55%,#d48a10);box-shadow:0 0 6px rgba(255,201,60,.6)}
+.gift{position:relative;justify-self:center;align-self:center;margin:0 auto;width:72px;height:66px;border-radius:18px;display:grid;place-items:center;
+  background:linear-gradient(180deg,var(--violet-hi),var(--violet) 55%,var(--violet-lo));box-shadow:inset 0 -5px 0 rgba(0,0,0,.25),0 0 18px rgba(255,201,60,.55);animation:cardIn .5s .2s both}
+.gift svg{width:40px;height:40px}
+.ice .badge.tick{animation:tickB .4s}
+@keyframes tick{40%{transform:scale(1.3)}}
+@keyframes tickB{40%{transform:translate(-50%,-50%) scale(1.3)}}
+.plain.danger{color:#ffb4b4}
+.reward{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-display);font-weight:800;font-size:34px;color:var(--gold)}
+.reward svg{width:36px;height:36px}
+.row{display:flex;gap:8px}.row input{flex:1;min-width:0;font:inherit;font-weight:800;padding:8px 10px;border-radius:12px;border:2px solid var(--violet);background:var(--night);color:var(--text)}
+.rules{margin:0;padding-left:18px;color:var(--muted);font-size:13px;line-height:1.5;display:grid;gap:4px}
+.rules b{color:var(--text)}
+.mixing{font-family:var(--font-display);font-weight:800;font-size:22px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<div class="app" id="app">
+  <div class="hud">
+    <div class="pill" aria-label="Coins"><svg class="coin" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#f2a21b"/><circle cx="16" cy="16" r="11.5" fill="#ffd34d"/><path d="M16 8.5l2.3 4.7 5.2.7-3.8 3.6.9 5.1L16 20.2l-4.6 2.4.9-5.1-3.8-3.6 5.2-.7z" fill="#f29a12"/></svg><span id="coins">0</span></div>
+    <div class="level"><span id="levelLabel">Level 1</span></div>
+    <button class="gear" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="#fff"><path d="M19.4 13a7.5 7.5 0 000-2l2-1.6-2-3.4-2.4 1a7 7 0 00-1.7-1l-.4-2.6h-4l-.4 2.6a7 7 0 00-1.7 1l-2.4-1-2 3.4L4.6 11a7.5 7.5 0 000 2l-2 1.6 2 3.4 2.4-1a7 7 0 001.7 1l.4 2.6h4l.4-2.6a7 7 0 001.7-1l2.4 1 2-3.4zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg></button>
+  </div>
+  <div class="shelf" id="shelf"></div>
+  <div class="board" id="board"></div>
+  <div class="tray">
+    <button class="boost" id="bUndo"><div class="sq"><svg viewBox="0 0 40 40" fill="none" stroke="#2a1670" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 15h14a8 8 0 010 16H15"/><path d="M16 9l-6 6 6 6"/></svg><span class="cnt"></span></div>Undo</button>
+    <button class="boost" id="bShuffle"><div class="sq"><svg viewBox="0 0 40 40" fill="none" stroke="#2a1670" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18a11 11 0 0119-6l3 3"/><path d="M31 9v6h-6"/><path d="M31 22a11 11 0 01-19 6l-3-3"/><path d="M9 31v-6h6"/></svg><span class="cnt"></span></div>Shuffle</button>
+    <button class="boost" id="bAdd"><div class="sq"><svg viewBox="0 0 40 40" fill="none" stroke="#2a1670" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 6h8M22 6v6c0 2-4 3-4 7v13a3 3 0 003 3h8a3 3 0 003-3V19c0-4-4-5-4-7V6"/><path d="M5 22h10M10 17v10"/></svg><span class="cnt"></span></div>Bottle</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="veil" id="veil" hidden><div class="card" id="card"></div></div>
+<script>
+const PALETTE=[
+ {n:'Red',c:'#bb0000',p3:'color(display-p3 0.67 0.06 0.06)'},
+ {n:'Orange',c:'#ff5d00',p3:'color(display-p3 0.94 0.41 0.1)'},
+ {n:'Yellow',c:'#ff9f00',p3:'color(display-p3 0.96 0.64 0.18)'},
+ {n:'Green',c:'#00b141',p3:'color(display-p3 0.09 0.68 0.31)'},
+ {n:'Teal',c:'#00a9b8',p3:'color(display-p3 0.01 0.65 0.71)'},
+ {n:'Blue',c:'#003da4',p3:'color(display-p3 0.06 0.235 0.62)'},
+ {n:'Purple',c:'#7b10d7',p3:'color(display-p3 0.44 0.11 0.81)'},
+ {n:'Grey',c:'#747b9e',p3:'color(display-p3 0.46 0.48 0.61)'},
+ {n:'Pink',c:'#f4198e',p3:'color(display-p3 0.88 0.22 0.55)'},
+ {n:'Lime',c:'#7ac900',p3:'color(display-p3 0.55 0.78 0.12)',retired:true},
+ {n:'Brown',c:'#884411',p3:'color(display-p3 0.5 0.28 0.12)'},
+ {n:'Sky',c:'#2da6f9',p3:'color(display-p3 0.33 0.64 0.95)',retired:true}];
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function shuffle(a,rng){for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function params(L){
+  const C=L>=12?5:4;
+  const n=C===4?Math.min(3+Math.floor(L/2),9):Math.min(7+Math.floor((L-12)/4),10);
+  return {C,n,hidden:L>=3,empties:2,small:C===5?2:0,free:L>=15?2:(L>=6?1:0),
+    ice:L>=16?(L>=28&&L%3!==0?2:1):0, bags:L>=22?(L>=34&&L%2?2:1):0, dup:L>=26?(L>=40?2:1):0};
+}
+function solve(bottles,C,limit){
+  const caps=bottles.map(b=>b.cap),locks=bottles.map(b=>b.lock),nb=bottles.length;
+  const st=bottles.map(b=>b.u.slice());
+  const isCork=(b,i)=>caps[i]===C&&b.length===C&&b.every(x=>x===b[0]);
+  function openMask(){
+    const open=locks.map(l=>!l);let changed=true;
+    while(changed){changed=false;let total=0;const by={};
+      for(let i=0;i<nb;i++)if(open[i]&&isCork(st[i],i)){total++;by[st[i][0]]=(by[st[i][0]]||0)+1}
+      for(let i=0;i<nb;i++)if(!open[i]){const l=locks[i];if(l.type==='ice'?(by[l.color]||0)>=l.need:total>=l.need){open[i]=true;changed=true}}}
+    return open;
+  }
+  const seen=new Set();let nodes=0;
+  function key(open){const a=[],b=[];for(let i=0;i<nb;i++){const s=caps[i]+':'+String.fromCharCode(...st[i].map(x=>65+x));if(open[i])a.push(s);else b.push(i+s)}a.sort();return a.join('|')+'#'+b.join('|')}
+  function dfs(){
+    if(++nodes>limit)throw 0;
+    const open=openMask();
+    let done=true;for(let i=0;i<nb;i++)if(st[i].length&&!(open[i]&&isCork(st[i],i))){done=false;break}
+    if(done)return true;
+    const k=key(open);if(seen.has(k))return false;seen.add(k);
+    const moves=[];
+    for(let i=0;i<nb;i++){if(!open[i])continue;const s=st[i];if(!s.length||isCork(s,i))continue;
+      const t=s[s.length-1];let r=1;while(r<s.length&&s[s.length-1-r]===t)r++;const mono=r===s.length;
+      for(let j=0;j<nb;j++){if(j===i||!open[j])continue;const d=st[j];const sp=caps[j]-d.length;if(sp<=0)continue;
+        if(d.length){if(d[d.length-1]!==t)continue}else if(mono&&caps[j]===caps[i])continue;
+        const amt=Math.min(r,sp);let sc=0;if(d.length)sc+=10;if(caps[j]===C&&d.length+amt===C)sc+=100;if(amt===r)sc+=5;if(caps[j]===1)sc-=3;if(!d.length)sc-=2;
+        moves.push([sc,i,j,amt])}}
+    moves.sort((a,b)=>b[0]-a[0]);
+    for(const [,i,j,amt] of moves){const s=st[i],d=st[j];for(let q=0;q<amt;q++)d.push(s.pop());if(dfs())return true;for(let q=0;q<amt;q++)s.push(d.pop())}
+    return false;
+  }
+  try{return dfs()}catch(e){return null}
+}
+function generate(L){
+  const P=params(L);
+  for(let attempt=0;attempt<80;attempt++){
+    const rng=mulberry32(L*7919+attempt*104729+17);
+    let ice=P.ice,bags=P.bags;
+    if(attempt>=40){ice=Math.min(ice,1);bags=Math.min(bags,1)}
+    if(attempt>=60){ice=0;bags=0}
+    const colors=shuffle([...PALETTE.keys()].filter(i=>!PALETTE[i].retired),rng).slice(0,P.n);
+    const sets=[...colors];for(let i=0;i<P.dup;i++)sets.push(colors[i]);
+    const units=[];sets.forEach(c=>{for(let k=0;k<P.C;k++)units.push(c)});shuffle(units,rng);
+    const full=[];for(let i=0;i<sets.length;i++)full.push(units.slice(i*P.C,(i+1)*P.C));
+    if(full.some(b=>b.every(x=>x===b[0])))continue;
+    const bottles=full.map(u=>({cap:P.C,u,lock:null,kind:'full'}));
+    const lockIdx=shuffle([...full.keys()],rng).slice(0,ice+bags);
+    lockIdx.forEach((bi,k)=>{
+      if(k<ice){const color=sets[Math.floor(rng()*sets.length)];const avail=sets.filter(c=>c===color).length;
+        bottles[bi].lock={type:'ice',color,need:1+Math.floor(rng()*avail)}}
+      else bottles[bi].lock={type:'bag',need:2+Math.floor(rng()*3)};
+    });
+    for(let i=0;i<P.empties;i++)bottles.push({cap:P.C,u:[],lock:null,kind:'empty'});
+    for(let i=0;i<P.small;i++)bottles.push({cap:1,u:[],lock:null,kind:'small'});
+    const ok=solve(bottles,P.C,40000);
+    if(!ok)continue;
+    bottles.forEach(b=>{b.reveal=!P.hidden?P.C:1+Math.floor(rng()*(L<10?P.C-1:P.C-2))});
+    for(let i=0;i<P.free;i++)bottles.push({cap:P.C,u:[],lock:null,kind:'free',reveal:P.C});
+    // display order: full+empty shuffled, small pair inserted, free at end
+    const main=bottles.map((b,i)=>i).filter(i=>bottles[i].kind==='full'||bottles[i].kind==='empty');
+    shuffle(main,rng);
+    const cells=main.map(i=>[i]);
+    const smalls=bottles.map((b,i)=>i).filter(i=>bottles[i].kind==='small');
+    if(smalls.length)cells.splice(Math.floor(rng()*(cells.length+1)),0,smalls);
+    bottles.forEach((b,i)=>{if(b.kind==='free')cells.push([i])});
+    return {L,C:P.C,sets:sets.length,setColors:sets,bottles,cells,attempt};
+  }
+  return null;
+}
+/* Liquid geometry: bands stay level with gravity inside a tilted bottle */
+let BW=40,GT=2,BXv=20;
+/* liquid region: inset GT inside the glass; headroom above the top layer; a bottom cap (bc) that fills the curved base */
+function geomFor(b){const w=BW-4-2*GT,bc=w*.16,h=b.cap*U+3+BW*.18+bc;return{w,h,bc,base:bc*w,D:Math.ceil(Math.hypot(w,h)+w)}}
+const volOf=(n,g)=>n>.002?n*g.w*U+g.base:0;
+function segsOf(b){const segs=[];b.units.forEach((u,i)=>{const hid=!isRev(b,i),last=segs[segs.length-1];
+  if(!hid&&last&&!last.hid&&last.c===u.c)last.size++;else segs.push({c:u.c,hid,size:1})});return segs}
+function areaDeeper(s,gx,gy,w,h){
+  const N=40;let A=0;
+  if(Math.abs(gy)>=Math.abs(gx)){const d=w/N;for(let i=0;i<N;i++){const x=-w/2+(i+.5)*d,lim=(s-x*gx)/gy;
+    const len=gy>0?h/2-Math.max(lim,-h/2):Math.min(lim,h/2)+h/2;A+=Math.max(0,Math.min(h,len))*d}}
+  else{const d=h/N;for(let i=0;i<N;i++){const y=-h/2+(i+.5)*d,lim=(s-y*gy)/gx;
+    const len=gx>0?w/2-Math.max(lim,-w/2):Math.min(lim,w/2)+w/2;A+=Math.max(0,Math.min(w,len))*d}}
+  return A;
+}
+function depthFor(V,th,w,h){
+  if(Math.abs(th)<1e-4)return h/2-V/w;
+  const gx=Math.sin(th),gy=Math.cos(th),dmax=Math.abs(gx)*w/2+Math.abs(gy)*h/2;
+  let lo=-dmax,hi=dmax;for(let k=0;k<22;k++){const m=(lo+hi)/2;if(areaDeeper(m,gx,gy,w,h)>V)lo=m;else hi=m}
+  return (lo+hi)/2;
+}
+function chord(s,th,w,h){
+  const sn=Math.sin(th),cs=Math.cos(th);let lo=-1e9,hi=1e9;
+  for(const [a,b,L] of [[s*sn,cs,w/2],[s*cs,-sn,h/2]]){
+    if(Math.abs(b)<1e-6){if(Math.abs(a)>L)return null;continue}
+    let t1=(-L-a)/b,t2=(L-a)/b;if(t1>t2)[t1,t2]=[t2,t1];lo=Math.max(lo,t1);hi=Math.min(hi,t2)}
+  return lo<hi?[lo,hi]:null;
+}
+function liquidInner(segs,th,g){
+  const {w,h,D}=g,unitA=w*U,half=D/2,f=v=>v.toFixed(2),first=segs.find(x=>x.size>.002);
+  const ell=(s,style,cls)=>{const ch=chord(s,th,w,h);if(!ch)return '';const cw=ch[1]-ch[0],eh=Math.min(cw,w)*.32;
+    return `<div class="${cls}" style="${style};left:${f(half+ch[0])}px;width:${f(cw)}px;top:${f(half+s-eh/2)}px;height:${f(eh)}px"></div>`};
+  const dip=w*.16;
+  let out='',labels='',V=first?g.base:0,sBot=Math.abs(Math.sin(th))*w/2+Math.abs(Math.cos(th))*h/2+2,prev=null,sTop=0;
+  for(const seg of segs){
+    if(seg.size<=.002)continue;
+    V+=seg.size*unitA;const s=depthFor(V,th,w,h),cv=seg.hid?'':`--c:${col(seg.c)}`;
+    out+=`<div class="band${seg.hid?' hid':''}" style="${cv};top:${f(half+s)}px;height:${f(sBot-s+.7)}px"></div>`;
+    if(prev)out+=ell(sBot,cv,'cap'+(seg.hid?' hid':''));
+    if(seg.hid&&!th){const m=(s+sBot)/2+dip*.5,c=chord(m,th,w,h);if(c)labels+=`<span class="qm" style="left:${f(half+(c[0]+c[1])/2)}px;top:${f(half+m)}px">?</span>`}
+    prev=seg;sBot=s;sTop=s;
+  }
+  if(prev&&!prev.hid)out+=ell(sTop,`--c:${col(prev.c)}`,'surf');
+  return out+labels;
+}
+function lqHTML(segs,th,g){return `<div class="lq" style="width:${g.D}px;height:${g.D}px;margin:${-g.D/2}px 0 0 ${-g.D/2}px${th?`;transform:rotate(${-th}rad)`:''}">${liquidInner(segs,th,g)}</div>`}
+/* Visual state for bottles mid-pour */
+const VIS={};
+function visOf(b){return VIS[b.id]||(VIS[b.id]={segs:segsOf(b),th:0})}
+function paintVis(id){const v=VIS[id],el=elFor(id);if(!v||!el)return;const lq=el.querySelector('.lq');if(!lq)return;
+  lq.style.transform=v.th?`rotate(${-v.th}rad)`:'';lq.innerHTML=liquidInner(v.segs,v.th,geomFor(byId(id)))}
+function surfaceY(id){const v=VIS[id],g=geomFor(byId(id));let n=0;v.segs.forEach(s=>n+=s.size);const V=volOf(n,g);return GT+g.h/2+(V>0?depthFor(V,0,g.w,g.h):g.h/2)}
+const tween=(ms,fn)=>new Promise(r=>{const t0=performance.now();const step=now=>{const p=Math.min(1,(now-t0)/ms);fn(p);p<1?requestAnimationFrame(step):r()};requestAnimationFrame(step)});
+const easeInOutCubic=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const easeOut=p=>1-Math.pow(1-p,3),easeInOut=p=>p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+
+const STORE='watermatch.v1';
+const PRICES={undo:25,shuffle:60,add:90};
+const COIN_SVG='<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#f2a21b"/><circle cx="16" cy="16" r="11.5" fill="#ffd34d"/></svg>';
+const LOCK_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="#3a1f12" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2" fill="#f2a21b" stroke="none"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
+const $=id=>document.getElementById(id);
+const board=$('board');
+let save=load()||{level:1,coins:150,inv:{undo:3,shuffle:1,add:1},game:null};
+let G=null,busy=false,mode=null,LIFT=12,U=24;
+let freshBag=-1;
+
+function load(){try{return JSON.parse(localStorage.getItem(STORE))}catch(e){return null}}
+function persist(){save.game=G;try{localStorage.setItem(STORE,JSON.stringify(save))}catch(e){}}
+const P3OK=window.CSS&&CSS.supports('color','color(display-p3 1 0 0)');
+const col=c=>P3OK?PALETTE[c].p3:PALETTE[c].c,hex=c=>PALETTE[c].c;
+const byId=id=>G.bottles[id];
+const topU=b=>b.units[b.units.length-1];
+/* the pourable run: the top layer plus the same-color layers directly under it that are already visible.
+   A hidden layer stays hidden (and stays put) until everything above it has been poured off. */
+function runLen(b){const n=b.units.length;if(!n)return 0;const c=b.units[n-1].c;let r=1;while(r<n&&b.units[n-1-r].c===c&&G.rev[b.units[n-1-r].id])r++;return r}
+const lockedNow=b=>(b.lock&&!b.open)||(b.kind==='free'&&b.freeLocked);
+const selectable=b=>!lockedNow(b)&&!b.corked&&b.units.length>0;
+function canPour(s,t){
+  if(s===t||lockedNow(s)||lockedNow(t)||s.corked||t.corked||!s.units.length)return false;
+  if(t.units.length>=t.cap)return false;
+  return !t.units.length||topU(t).c===topU(s).c;
+}
+function remaining(b){const l=b.lock;return l.type==='ice'?l.need-(G.corks.by[l.color]||0):l.need-G.corks.total}
+function revealTop(b){const n=b.units.length;if(n)G.rev[b.units[n-1].id]=1}
+const isRev=(b,i)=>i===b.units.length-1||G.rev[b.units[i].id];
+
+function newGame(L){
+  busy=true;mode=null;
+  showCard(`<div class="mixing" style="text-align:center">Mixing level ${L}…</div>`,false);
+  setTimeout(()=>{
+    const g=generate(L);let uid=0;
+    G={L,C:g.C,sets:g.sets,cells:g.cells,rev:{},corks:{total:0,by:{}},done:[],undo:[],added:0,sel:null,
+      bottles:g.bottles.map((b,i)=>({id:i,cap:b.cap,kind:b.kind,lock:b.lock,open:false,corked:false,freeLocked:b.kind==='free',
+        units:b.u.map(c=>({c,id:uid++})),reveal:b.reveal}))};
+    G.uid=uid;
+    G.bottles.forEach(b=>{const n=b.units.length;for(let i=Math.max(0,n-b.reveal);i<n;i++)G.rev[b.units[i].id]=1;revealTop(b)});
+    hideCard();busy=false;render();persist();
+  },40);
+}
+
+function computeLayout(){
+  // size for the level's bottles plus room for the 2 bottles you can add, so adding one never shrinks anything
+  const n=G.cells.length-(G.added||0)+2,W=board.clientWidth,H=board.clientHeight-LIFT-8;
+  const maxCols=W>=360?6:5,rows=Math.ceil(n/maxCols),cols=Math.ceil(n/rows);
+  const cellW=(W-6*(cols-1))/cols;
+  // fixed bottle proportions from the original (5 units = 1.85 x bottle width), scaled uniformly to fit;
+  // rows are spaced so a cork never reaches the bottle above
+  const UR=1.85/G.C,fit=gy=>Math.max(24,Math.min((W-6*(cols-1))/(cols*1.12),84,((H-gy*(rows-1))/rows-LIFT-9)/2.69));
+  let gy=Math.max(16,H*.035),bw=fit(gy);if(gy<bw*.24+10){gy=bw*.24+10;bw=fit(gy)}
+  const u=bw*UR;
+  U=u;BW=bw;GT=Math.max(1.5,bw*.045);
+  const bx=7+bw*.18+(bw-4-2*GT)*.16+2*GT;
+  BXv=bx;
+  // columns sit close together: each cell is one bottle wide, rows centered
+  // gap = room for ice/bag overhang on both neighbours + a clear margin between their edges
+  const gx=2*Math.max(2.5,bw*.05)+Math.max(4,bw*.06),cw=bw,rowW=cols*cw+(cols-1)*gx;
+  board.style.paddingInline=Math.max(0,(W-rowW)/2-1)+'px';
+  const s=board.style;s.setProperty('--u',u+'px');s.setProperty('--gt',GT+'px');s.setProperty('--bx',bx+'px');s.setProperty('--bw',bw+'px');s.setProperty('--cw',cw+'px');s.setProperty('--gx',gx+'px');s.setProperty('--gy',gy+'px');
+}
+
+/* Ice: a frosted shell in the bottle's own silhouette; shatters into shards when it opens */
+let iceSeq=0;
+function iceSVG(b,shatter){
+  const bw=BW,p=Math.max(1.5,bw*.035),f=v=>v.toFixed(1),id='ic'+b.id+'_'+(++iceSeq),rng=mulberry32(b.id*977+G.L*31+7);
+  const neckH=bw*.22,bodyTop=neckH-1,yb=bodyTop+b.cap*U+BXv,R=(b.cap===1?.26:.3)*bw+p,rb=bw*.17+p;
+  const lcx=bw/2,lcy=bw*.01,lrx=bw*.36+p,lry=bw*.19+p,x0=-p,x1=bw+p,yt=bodyTop-p,ybp=yb+p;
+  const body=`M${f(x0)} ${f(yt+R)}A${f(R)} ${f(R)} 0 0 1 ${f(x0+R)} ${f(yt)}L${f(x1-R)} ${f(yt)}A${f(R)} ${f(R)} 0 0 1 ${f(x1)} ${f(yt+R)}L${f(x1)} ${f(ybp-rb)}A${f((x1-x0)/2)} ${f(rb)} 0 0 1 ${f(x0)} ${f(ybp-rb)}Z`;
+  const nx=lcx-bw*.22-p,nw=bw*.44+2*p;
+  const shapes=`<ellipse cx="${f(lcx)}" cy="${f(lcy)}" rx="${f(lrx)}" ry="${f(lry)}"/><rect x="${f(nx)}" y="${f(lcy)}" width="${f(nw)}" height="${f(yt+R-lcy)}"/><path d="${body}"/>`;
+  const top=lcy-lry,H=ybp-top;
+  let frost='';for(let i=0;i<7;i++){const fx=x0+rng()*(x1-x0),fy=top+rng()*H,r=bw*(.12+rng()*.22);
+    frost+=`<ellipse cx="${f(fx)}" cy="${f(fy)}" rx="${f(r)}" ry="${f(r*(.5+rng()*.6))}" fill="url(#${id}f)"/>`}
+  const art=`<g id="${id}a"><g fill="url(#${id}g)">${shapes}</g><g clip-path="url(#${id}s)">${frost}
+    <path d="M${f(x0+bw*.18)} ${f(ybp)}L${f(x0+bw*.3)} ${f(ybp)}L${f(x1-bw*.1)} ${f(yt+bw*.1)}L${f(x1-bw*.22)} ${f(yt+bw*.1)}Z" fill="rgba(255,255,255,.22)"/>
+    <path d="M${f(x0+bw*.08)} ${f(yt+R*1.1)}Q${f(x0+bw*.05)} ${f((yt+ybp)/2)} ${f(x0+bw*.14)} ${f(ybp-rb*1.6)}" stroke="rgba(255,255,255,.75)" stroke-width="${f(bw*.05)}" stroke-linecap="round" fill="none"/></g>
+    <g fill="none" stroke="rgba(255,255,255,.8)" stroke-width="1.4"><path d="${body}"/><ellipse cx="${f(lcx)}" cy="${f(lcy)}" rx="${f(lrx)}" ry="${f(lry)}"/>
+    <ellipse cx="${f(lcx)}" cy="${f(lcy-lry*.15)}" rx="${f(lrx*.55)}" ry="${f(lry*.42)}" fill="rgba(150,195,230,.55)" stroke="rgba(255,255,255,.6)"/></g></g>`;
+  const defs=`<defs><linearGradient id="${id}g" gradientUnits="userSpaceOnUse" x1="${f(x0)}" y1="${f(top)}" x2="${f(x1)}" y2="${f(ybp)}">
+    <stop offset="0" stop-color="#f1faff" stop-opacity=".96"/><stop offset=".45" stop-color="#bfe2f8" stop-opacity=".93"/><stop offset=".7" stop-color="#d8efff" stop-opacity=".94"/><stop offset="1" stop-color="#9ccbec" stop-opacity=".95"/></linearGradient>
+    <radialGradient id="${id}f"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <clipPath id="${id}s">${shapes}</clipPath>${art}`;
+  let inner;
+  if(!shatter)inner=`<use href="#${id}a"/>`;
+  else{
+    // radial crack pattern from the badge outward; each wedge piece becomes a shard
+    const cx=bw/2,cy=bodyTop+(yb-bodyTop)/2,ax=bw*.62,ay=H*.55,n=7,rings=[0,.38,.8,1.7],a0=rng()*6.28,pts=[];
+    for(let k=0;k<n;k++){const base=a0+k*6.283/n+(rng()-.5)*.35;pts.push(rings.map((rf,j)=>{if(!j)return[cx,cy];const a=base+(rng()-.5)*.22,s=rf*(.88+rng()*.24);return[cx+Math.cos(a)*ax*s,cy+Math.sin(a)*ay*s]}))}
+    let clips='';inner='';
+    for(let k=0;k<n;k++)for(let j=0;j<3;j++){
+      const A=pts[k],B=pts[(k+1)%n],poly=j?[A[j],A[j+1],B[j+1],B[j]]:[A[0],A[1],B[1]],ps=poly.map(q=>f(q[0])+','+f(q[1])).join(' ');
+      const mx=poly.reduce((s,q)=>s+q[0],0)/poly.length,my=poly.reduce((s,q)=>s+q[1],0)/poly.length;
+      let dx=mx-cx,dy=my-cy;const L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;const dist=bw*(.45+rng()*.45);
+      clips+=`<clipPath id="${id}p${k}_${j}"><polygon points="${ps}"/></clipPath>`;
+      inner+=`<g class="shard" style="transform-origin:${f(mx)}px ${f(my)}px;--dx:${f(dx*dist)}px;--dy:${f(dy*dist*.6-bw*.25)}px;--fall:${f(bw*(1.3+rng()*.9))}px;--r:${f((rng()-.5)*110)}deg;--d:${Math.round(250+j*45+rng()*50)}ms">
+        <g clip-path="url(#${id}p${k}_${j})"><use href="#${id}a"/><g clip-path="url(#${id}s)"><polygon class="crk" points="${ps}" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>`}
+    inner=`<defs>${clips}</defs>`+inner;
+  }
+  return {svg:`<svg class="icesvg" width="${f(bw)}" height="${f(yb)}" aria-hidden="true">${defs}</defs>${inner}</svg>`,badgeY:(bodyTop+yb)/2};
+}
+function layerGroups(b){const g=[];b.units.forEach((u,i)=>{const v=!!isRev(b,i),last=g[g.length-1];if(last&&v&&last.v&&last.c===u.c)last.us.push(u);else g.push({c:u.c,v,us:[u]})});return g}
+
+function bottleHTML(b){
+  const locked=b.lock&&!b.open,cls=['bottle'];if(b.gone)cls.push('gone');
+  if(mode==='shuffle'&&shufflable(b))cls.push('pickable');
+  if(b.cap===1)cls.push('small');if(G.sel===b.id)cls.push('selected');if(b.corked)cls.push('corked');if(lockedNow(b))cls.push('locked');
+  const liq=locked?'':`<div class="lqc">${lqHTML(segsOf(b),0,geomFor(b))}</div>`;
+  let over='';
+  if(b.lock&&(!b.open||b.justOpened)){
+    const anim=b.justOpened?(b.lock.type==='ice'?' shatter':' tear'):'';
+    const rem=Math.max(0,remaining(b)),ice=b.lock.type==='ice'?iceSVG(b,!!b.justOpened):null;
+    over=ice
+      ?`<div class="ice${anim}">${ice.svg}<div class="badge" style="--c:${col(b.lock.color)};top:${ice.badgeY.toFixed(1)}px" aria-label="Frozen until ${rem} more ${PALETTE[b.lock.color].n} bottles are corked">${rem}</div></div>`
+      :`<div class="bag${anim}"><div class="tag" aria-label="Bagged until ${rem} more bottles are corked">${rem}</div></div>`;
+  }
+  if(b.kind==='free'&&b.freeLocked)over=`<div class="freelock"><div class="lockicon">${LOCK_SVG}</div><span class="chip">Free</span></div>`;
+  const done=b.corked?`;--done:${col(b.units[0].c)}`:'';
+  return `<div class="slot" data-id="${b.id}" role="button" tabindex="0"><div class="${cls.join(' ')}" style="--cap:${b.cap}${done}">
+    ${b.corked?`<div class="cork${b.justCorked?' pop':''}"></div>`:''}<div class="neck"></div>
+    <div class="body">${liq}<div class="shade"></div><div class="fx"></div><div class="shine"></div></div>${over}</div></div>`;
+}
+
+const BAG=(fill,handle)=>`<svg viewBox="0 0 22 26"><path d="M7 8V5a4 4 0 018 0v3" fill="none" stroke="${handle}" stroke-width="2.4"/><path d="M3 8h16l1.5 16.5H1.5z" fill="${fill}"/><path d="M3 8h16l.5 5H2.5z" fill="rgba(255,255,255,.18)"/></svg>`;
+/* Lock badges count down as bottles are corked */
+function updateLockCounts(){
+  G.bottles.forEach(b=>{if(!b.lock||b.open)return;
+    const el=board.querySelector(`.slot[data-id="${b.id}"] ${b.lock.type==='ice'?'.badge':'.tag'}`);if(!el)return;
+    const r=String(Math.max(0,remaining(b)));if(el.textContent===r)return;
+    el.textContent=r;el.classList.remove('tick');void el.offsetWidth;el.classList.add('tick');
+    el.setAttribute('aria-label',b.lock.type==='ice'?`Frozen until ${r} more ${PALETTE[b.lock.color].n} bottles are corked`:`Bagged until ${r} more bottles are corked`)});
+}
+/* Free bottles: a confirm step with a short hold, so using one takes a moment of deliberate effort */
+function giftPips(n){let h='';for(let i=0;i<GIFT_EVERY;i++)h+=`<i class="${i<n?'on':''}"></i>`;return `<div class="pips">${h}</div>`}
+function confirmFree(b){
+  const stuck=isStuck(),g=save.gift||0;
+  const cost=g?`<p>It empties your gift meter.</p>${giftPips(g)}`:'';
+  const buy=`<button class="plain buy-alt" id="fBuy">${iconOf('add')}${save.inv.add>0?'×'+save.inv.add:COIN_SVG+PRICES.add}</button>`;
+  showCard(stuck
+    ?`<h2>Stuck.</h2>${cost}<button class="big hold" id="fUse"><span>Hold to give up</span></button>${buy}<button class="plain" id="fKeep">Close</button>`
+    :`<h2>Giving up already?</h2><p>This level can be solved without it.</p>${cost}
+      <button class="big" id="fKeep">Keep trying</button>${buy}<button class="plain hold" id="fUse"><span>Hold to give up</span></button>`,true,()=>{
+    $('fKeep').onclick=hideCard;
+    $('fBuy').onclick=()=>{hideCard();boostAdd()};
+    const btn=$('fUse');let t=null;
+    const start=e=>{if(t)return;e.preventDefault();btn.classList.add('on');t=setTimeout(()=>{t=null;hideCard();
+      b.freeLocked=false;G.usedFree=true;save.gift=0;refreshBottle(b.id);persist();toast('Bottle unlocked');if(!anims)checkStuck()},3000)};
+    const stop=()=>{if(!t)return;clearTimeout(t);t=null;btn.classList.remove('on')};
+    btn.addEventListener('pointerdown',start);['pointerup','pointerleave','pointercancel'].forEach(ev=>btn.addEventListener(ev,stop));
+    btn.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter')start(e)});btn.addEventListener('keyup',stop);
+    btn.addEventListener('contextmenu',e=>e.preventDefault());
+  });
+}
+function renderHUD(){
+  updateLockCounts();
+  $('coins').textContent=save.coins;$('levelLabel').textContent='Level '+G.L;
+  let h='';for(let i=0;i<G.sets;i++){
+    const c=arriving[i]?null:G.done[i];h+=c==null?BAG('#16142c','#3a375e'):BAG('#f3eefc',hex(c)).replace('<svg',`<svg${i===freshBag?' class="fresh"':''}`)}
+  $('shelf').innerHTML=h+`<div class="shelf-label">${G.corks.total} of ${G.sets} bottles corked</div>`;freshBag=-1;
+  const inv=save.inv;
+  [['bUndo','undo'],['bShuffle','shuffle'],['bAdd','add']].forEach(([el,k])=>{
+    const c=$(el).querySelector('.cnt');
+    if(inv[k]>0){c.className='cnt';c.textContent=inv[k]}else{c.className='cnt price';c.innerHTML=COIN_SVG+PRICES[k]}});
+  $('bShuffle').classList.toggle('active',mode==='shuffle');
+}
+function render(){
+  if(anims){needRender=true;return}
+  computeLayout();
+  board.innerHTML=G.cells.map(cell=>`<div class="cell">${cell.map(id=>bottleHTML(byId(id))).join('')}</div>`).join('');
+  G.bottles.forEach(b=>{delete b.justCorked;delete b.justOpened});
+  board.classList.toggle('picking',mode==='shuffle');
+  renderHUD();checkStuck();flyCorked();
+}
+function refreshBottle(id){
+  const slot=board.querySelector(`.slot[data-id="${id}"]`),b=byId(id);if(!slot||!b)return;
+  slot.outerHTML=bottleHTML(b);delete b.justCorked;delete b.justOpened;
+}
+const elFor=id=>board.querySelector(`.slot[data-id="${id}"] .bottle`);
+function setSel(id){G.sel=id;board.querySelectorAll('.bottle.selected:not(.flying)').forEach(e=>e.classList.remove('selected'));if(id!=null)elFor(id).classList.add('selected')}
+function shake(id,small){const e=elFor(id);if(!e)return;e.classList.remove('shake','shake-s');void e.offsetWidth;e.classList.add(small?'shake-s':'shake')}
+
+/* In-flight pours: logical state updates at once; visuals catch up per bottle */
+let anims=0,needRender=false,idleQueue=[],maskSeq=0;
+const active={},flying={},incoming={};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function whenIdle(fn){if(anims)idleQueue.push(fn);else fn()}
+function onIdle(){
+  renderHUD();
+  if(needRender){needRender=false;render()}else checkStuck();
+  checkWin();
+  const q=idleQueue;idleQueue=[];q.forEach(f=>f());
+}
+
+function onTap(id){
+  if(busy||!G||flying[id])return;const b=byId(id);if(b.gone)return;
+  if(b.kind==='free'&&b.freeLocked){confirmFree(b);return}
+  if(mode==='shuffle'){if(shufflable(b))whenIdle(()=>doShuffle(b));else shake(id,true);return}
+  const free=!active[id];
+  if(G.sel==null){if(selectable(b)&&free)setSel(id);else if(free)shake(id,true);return}
+  if(G.sel===id){setSel(null);return}
+  const s=byId(G.sel);
+  if(canPour(s,b))pour(s,b);
+  else if(free)shake(id);   // disallowed pour: shake the target, keep the selected bottle ready
+}
+
+function snapshot(){const o={};G.bottles.forEach(b=>o[b.id]=b.units.slice());return o}
+function pour(s,t){
+  const amt=Math.min(runLen(s),t.cap-t.units.length),c=topU(s).c;
+  G.undo.push(snapshot());if(G.undo.length>60)G.undo.shift();
+  const sEl=elFor(s.id);if(sEl)sEl.classList.add('flying','selected');
+  const sv=visOf(s),tv=visOf(t),sSeg=sv.segs[sv.segs.length-1],tSeg={c,hid:false,size:0};tv.segs.push(tSeg);
+  G.sel=null;
+  t.units.push(...s.units.splice(s.units.length-amt,amt));
+  revealTop(s);
+  const opened=[];maybeCork(t,opened);
+  active[s.id]=(active[s.id]||0)+1;active[t.id]=(active[t.id]||0)+1;flying[s.id]=true;anims++;
+  persist();
+  animatePour(s,t,amt,c,sSeg,tSeg).catch(()=>{}).then(()=>{
+    active[s.id]--;active[t.id]--;delete flying[s.id];anims--;
+    [s.id,t.id,...opened].forEach(id=>{if(!active[id]){delete VIS[id];refreshBottle(id)}});
+    flyCorked();
+    renderHUD();
+    if(!anims)onIdle();
+  });
+}
+function maybeCork(b,opened=[]){
+  if(b.corked||b.cap!==G.C||b.units.length!==G.C||!b.units.every(u=>u.c===b.units[0].c))return;
+  const c=b.units[0].c;b.corked=true;b.justCorked=true;
+  G.corks.total++;G.corks.by[c]=(G.corks.by[c]||0)+1;b.bagIdx=G.done.length;arriving[b.bagIdx]=1;G.done.push(c);
+  G.undo=[];G.corkBlock=true;
+  G.bottles.forEach(x=>{if(x.lock&&!x.open&&remaining(x)<=0){x.open=true;x.justOpened=true;revealTop(x);opened.push(x.id);maybeCork(x,opened)}});
+}
+
+async function animatePour(s,t,amt,c,sSeg,tSeg){
+  const sEl=elFor(s.id),tEl=elFor(t.id),run0=sSeg.size;
+  const finish=()=>{sSeg.size=run0-amt;tSeg.size=amt};
+  if(!sEl||!tEl||matchMedia('(prefers-reduced-motion: reduce)').matches){finish();return}
+  const sides=incoming[t.id]||(incoming[t.id]={});
+  while(sides[1]&&sides[-1])await sleep(40);
+  const sv=VIS[s.id];
+  const sr=sEl.getBoundingClientRect(),tr=tEl.getBoundingClientRect();
+  const pr=sEl.parentElement.getBoundingClientRect(),lifted=pr.top-sr.top,h=sEl.offsetHeight;
+  const cx=pr.left+pr.width/2,cy=pr.top+h/2,tcx=tr.left+tr.width/2;
+  let dir=tcx>=cx?1:-1;if(sides[dir])dir=-dir;sides[dir]=true;
+  let n0=0;sv.segs.forEach(x=>n0+=x.size);
+  // tilt just far enough that the liquid surface reaches the neck on the downhill side
+  // tilt until the level surface just spills over the lower lip of the opening
+  const sg=geomFor(s),unitV=sg.w*U,swp=Math.max(4,BW*.14),HR=.43*(.44*BW-4),HY=2-BW*.06,Ly=-sg.h/2-GT-BW*.28+1;
+  const tiltFor=n=>{const V=volOf(n,sg);if(V<=1)return dir*1.95;let lo=.05,hi=1.95;
+    for(let k=0;k<18;k++){const m=(lo+hi)/2,s=depthFor(V,m,sg.w,sg.h),pd=(HR-swp)*Math.sin(m)+Ly*Math.cos(m);if(s>pd)lo=m;else hi=m}
+    return dir*(lo+hi)/2};
+  // neck and opening share the same level surface as the body
+  const pc=col(c),neckEl=sEl.querySelector('.neck'),nlq=document.createElement('div'),ND=BW*2;
+  nlq.className='nlq';nlq.innerHTML='<div class="nrot"><div class="nfill"></div></div>';neckEl.appendChild(nlq);
+  const nrot=nlq.firstChild,nfill=nrot.firstChild;
+  Object.assign(nrot.style,{width:ND+'px',height:ND+'px',marginLeft:-ND/2+'px',marginTop:-ND/2+'px'});nfill.style.background=pc;
+  sEl.style.setProperty('--pc',pc);sEl.classList.add('spouting');
+  const spout=th=>{let n=0;sv.segs.forEach(x=>n+=x.size);const V=volOf(n,sg),g0=Math.sin(th),g1=Math.cos(th);
+    const sB=V>0?depthFor(V,th,sg.w,sg.h):1e4,sn=sB-(-sg.h/2-GT-BW*.11)*g1;
+    nrot.style.transform=`rotate(${-th}rad)`;nfill.style.top=(ND/2+sn)+'px';
+    const d=sB-(-sg.h/2-GT-BW*.28)*g1,Lg=Math.abs(BW*.378*g0)+Math.abs(BW*.11*g1)||1;
+    sEl.style.setProperty('--ha',(180-th*180/Math.PI)+'deg');sEl.style.setProperty('--hs',Math.max(-50,Math.min(150,50+d/Lg*100))+'%')};
+  const th0=tiltFor(n0),th1=tiltFor(n0-amt);
+  const lx=tcx-dir*1.5,mx=lx-dir*BW*.32,my=tr.top-BW*.95;
+  const centerAt=th=>[mx-(h/2)*Math.sin(th),my+(h/2)*Math.cos(th)];
+  let maskG=null;
+  const place=(x,y,th)=>{sEl.style.transform=`translate(${x-cx}px,${y-cy}px) rotate(${th}rad)`;sv.th=th;paintVis(s.id);spout(th);
+    if(maskG)maskG.setAttribute('transform',`translate(${x+(h/2)*Math.sin(th)} ${y-(h/2)*Math.cos(th)}) rotate(${th*180/Math.PI})`)};
+  sEl.style.transition='none';sEl.style.zIndex=30;
+  const [ax,ay]=centerAt(th0);
+  await tween(190,p=>{const e=easeOut(p);place(cx+(ax-cx)*e,cy-lifted+(ay-cy+lifted)*e,th0*e)});
+  // stream: outside the target above its mouth, then inside the neck and body behind the glass
+  const sw=Math.max(4,BW*.14),cs=col(c);
+  const neck=tEl.querySelector('.neck'),body=tEl.querySelector('.body'),fx=body.querySelector('.fx');
+  const nr=neck.getBoundingClientRect(),br=body.getBoundingClientRect();
+  const mk=(cls,parent)=>{const d=document.createElement('div');d.className=cls;d.style.setProperty('--c',cs);parent.appendChild(d);return d};
+  const inN=mk('pour',neck),inB=mk('pour',fx),foam=mk('foam',fx);
+  // outside: a waterfall arc from the pouring lip into the opening, ending at the front rim (like the cork)
+  const hy=nr.top+2-BW*.005;
+  // the stream runs up the neck (hidden), through the opening (visible, same color as the pool there), then arcs down
+  const arcD=th=>{const c=Math.cos(th),sn=Math.sin(th),toS=(x,y)=>[mx+x*c-y*sn,my+x*sn+y*c],x=dir*(HR-swp*.5);
+    const [ax,ay]=toS(x,HY+BW*.2),[sx,sy]=toS(x,HY),[c1x,c1y]=toS(x,HY-BW*.22);
+    return `M${ax} ${ay}L${sx} ${sy}C${c1x} ${c1y} ${lx} ${sy+(hy-sy)*.4} ${lx} ${hy}`};
+  const d=arcD(th0);
+  const NS='http://www.w3.org/2000/svg',svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('class','pour-arc');svg.style.cssText='position:fixed;left:0;top:0;width:100vw;height:100vh;overflow:visible;pointer-events:none;z-index:40';
+  const pth=(stroke,width,dx)=>{const p=document.createElementNS(NS,'path');p.setAttribute('d',d);p.setAttribute('fill','none');p.setAttribute('pathLength','1');
+    p.setAttribute('transform',`translate(${dx} 0)`);Object.assign(p.style,{stroke,strokeWidth:width,strokeLinecap:'butt',strokeDasharray:'1 1',strokeDashoffset:'1'});svg.appendChild(p);return p};
+  // hide the stream inside the opening and on the bottle side of it, so it spills out over the rim edge
+  const mid='pm'+(++maskSeq),hcy=HY;
+  svg.innerHTML=`<defs><mask id="${mid}" maskUnits="userSpaceOnUse" x="-4000" y="-4000" width="8000" height="8000"><rect x="-4000" y="-4000" width="8000" height="8000" fill="#fff"/><g><rect x="${-BW}" y="${hcy}" width="${2*BW}" height="${2*BW}" fill="#000"/><ellipse cx="0" cy="${hcy}" rx="${HR}" ry="${BW*.055-1}" fill="#fff"/></g></mask></defs>`;
+  maskG=svg.querySelector('mask g');maskG.setAttribute('transform',`translate(${mx} ${my}) rotate(${th0*180/Math.PI})`);
+  const arcs=[pth(cs,sw,0)];arcs.forEach(p=>p.setAttribute('mask',`url(#${mid})`));
+  document.body.appendChild(svg);
+  arcs.forEach(p=>p.animate([{strokeDashoffset:1},{strokeDashoffset:0}],{duration:90,fill:'forwards'}));
+  Object.assign(inN.style,{left:lx-nr.left-2-sw/2+'px',top:BW*.2+'px',width:sw+'px',height:Math.max(0,nr.height-BW*.2)+'px'});
+  const bx=lx-br.left-2;
+  Object.assign(inB.style,{left:bx-sw/2+'px',top:'0px',width:sw+'px'});
+  const pieces=[inN,inB];
+  pieces.forEach((p,i)=>{p.style.transformOrigin='top';p.animate([{transform:'scaleY(0)'},{transform:'scaleY(1)'}],{duration:50,delay:80+i*20,fill:'backwards'})});
+  let lastDrop=0;
+  const spawnDrop=y=>{const d=mk('drop',fx),r=Math.max(2.5,sw*.42),dx=(Math.random()-.5)*sw*4,up=4+Math.random()*sw*1.6;
+    Object.assign(d.style,{left:bx-r/2+'px',top:y-r/2+'px',width:r+'px',height:r+'px'});
+    d.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${dx*.6}px,${-up}px) scale(.9)`,offset:.45},{transform:`translate(${dx}px,2px) scale(.5)`,opacity:.2}],{duration:340,easing:'ease-out'}).onfinish=()=>d.remove()};
+  const tv=VIS[t.id];
+  await tween(300,p=>{
+    const th=tiltFor(n0-amt*p),[x,y]=centerAt(th);
+    sSeg.size=run0-amt*p;place(x,y,th);
+    const dd=arcD(th);arcs.forEach(a=>a.setAttribute('d',dd));
+    tSeg.size=amt*Math.min(1,Math.max(0,(p-.08)/.92));
+    if(tv)paintVis(t.id);
+    const sy=surfaceY(t.id);
+    inB.style.height=Math.max(0,sy)+'px';
+    const fw=sw*3.2,fh=sw*1.1;Object.assign(foam.style,{left:bx-fw/2+'px',top:sy-fh/2+'px',width:fw+'px',height:fh+'px'});
+    const now=performance.now();if(now-lastDrop>45){lastDrop=now;spawnDrop(sy)}
+  });
+  finish();paintVis(s.id);if(tv)paintVis(t.id);
+  sides[dir]=false;
+  arcs.forEach(p=>p.animate([{strokeDashoffset:0},{strokeDashoffset:-1}],{duration:110,fill:'forwards'}));setTimeout(()=>svg.remove(),130);
+  pieces.forEach((p,i)=>p.animate([{transform:'translateY(0) scaleY(1)'},{transform:'translateY(100%) scaleY(0)'}],{duration:80+i*30,delay:90+i*30,fill:'forwards'}).onfinish=()=>p.remove());
+  foam.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(1.6,.6)'}],{duration:220,delay:120,fill:'forwards'}).onfinish=()=>foam.remove();
+  const [ex,ey]=centerAt(th1);
+  // return: gentle start and gentle landing; longer when the bottle has further to rotate back
+  await tween(340+90*Math.abs(th1),p=>{const e=easeInOutCubic(p);place(ex+(cx-ex)*e,ey+(cy-ey)*e,th1*(1-e))});
+  sEl.style.transform='';sEl.classList.remove('spouting');nlq.remove();
+}
+
+/* Corked bottles fly up into their bag on the shelf */
+const arriving={},flyQueued=new Set();let flights=0;
+function flyCorked(){
+  if(!G)return;
+  G.bottles.forEach(b=>{if(b.corked&&!b.gone&&!flyQueued.has(b.id)&&!active[b.id]){flyQueued.add(b.id);setTimeout(()=>flyAway(b),480)}});
+}
+function flyAway(b){
+  flyQueued.delete(b.id);
+  if(!G||G.bottles[b.id]!==b||b.gone)return;
+  if(active[b.id]){flyCorked();return}
+  const el=elFor(b.id),bag=$('shelf').querySelectorAll('svg')[b.bagIdx];
+  const land=()=>{delete arriving[b.bagIdx];freshBag=b.bagIdx;renderHUD()};
+  b.gone=true;persist();
+  if(!el||!bag||matchMedia('(prefers-reduced-motion: reduce)').matches){refreshBottle(b.id);land();return}
+  const r=el.getBoundingClientRect(),br=bag.getBoundingClientRect();
+  const wrap=document.createElement('div');wrap.style.cssText=board.style.cssText+`;padding:0;margin:0;position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;z-index:45;pointer-events:none`;
+  wrap.innerHTML=el.outerHTML;const clone=wrap.firstChild;clone.classList.remove('selected');clone.querySelector('.cork')?.classList.remove('pop');
+  document.body.appendChild(wrap);refreshBottle(b.id);flights++;
+  const dx=br.left+br.width/2-(r.left+r.width/2),dy=br.top+br.height/2-(r.top+r.height/2),sc=Math.min(.5,br.height*1.6/r.height),tilt=dx>0?14:-14;
+  wrap.animate([{transform:'none'},{transform:'translateY(-18px) scale(1.06)',offset:.18},{transform:`translate(${dx}px,${dy}px) scale(${sc}) rotate(${tilt}deg)`,opacity:1,offset:.88},{transform:`translate(${dx}px,${dy+6}px) scale(${sc*.7})`,opacity:0}],
+    {duration:760,easing:'cubic-bezier(.45,0,.3,1)',fill:'forwards'}).onfinish=()=>{wrap.remove();flights--;land()};
+}
+function checkWin(){
+  if(!G.bottles.every(b=>!b.units.length||b.corked))return;
+  const reward=20+Math.min(40,G.L);
+  save.coins+=reward;save.level=G.L+1;save.game=null;
+  let gift=null,g=save.gift||0;
+  if(!G.usedFree){g++;if(g>=GIFT_EVERY){g=0;gift=GIFT_ORDER[(save.giftNext||0)%3];save.giftNext=(save.giftNext||0)+1;save.inv[gift]++}}
+  save.gift=g;persist();
+  const meter=gift?`<div class="gift">${iconOf(gift)}<span>+1</span></div>`:giftPips(g);
+  setTimeout(()=>showCard(`<h2>Level ${G.L} clear!</h2><div class="reward">${COIN_SVG}+${reward}</div>${meter}<button class="big" id="nextBtn">Next level</button>`,false,()=>{renderHUD();
+    $('nextBtn').onclick=()=>newGame(save.level)}),flights||flyQueued.size?1500:650);
+}
+/* Stuck = no sequence of pours can uncover a hidden layer, cork a bottle, or finish the level
+   (only pointless back-and-forth pours remain). Searches the reachable positions, capped for speed. */
+function isStuck(){
+  const live=G.bottles.filter(b=>!lockedNow(b)&&!b.corked&&!b.gone);
+  const caps=live.map(b=>b.cap),start=live.map(b=>b.units.slice());
+  const key=st=>st.map(a=>a.map(u=>u.c+(G.rev[u.id]?'':'h')).join('.')).join('|');
+  const seen=new Set([key(start)]),queue=[start];
+  if(start.every((a,i)=>!a.length||(caps[i]===G.C&&a.length===G.C&&a.every(u=>u.c===a[0].c))))return false;
+  while(queue.length){
+    const st=queue.shift();
+    for(let i=0;i<st.length;i++){const s=st[i];if(!s.length)continue;const c=s[s.length-1].c;let r=1;while(r<s.length&&s[s.length-1-r].c===c&&G.rev[s[s.length-1-r].id])r++;
+      if(caps[i]===G.C&&s.length===G.C&&r===s.length)continue;
+      for(let j=0;j<st.length;j++){if(j===i)continue;const t=st[j],sp=caps[j]-t.length;if(sp<=0)continue;
+        if(t.length?t[t.length-1].c!==c:r===s.length&&caps[j]===caps[i])continue;
+        const amt=Math.min(r,sp),ns=st.slice();ns[i]=s.slice(0,s.length-amt);ns[j]=t.concat(s.slice(s.length-amt));
+        const top=ns[i][ns[i].length-1];
+        if(top&&!G.rev[top.id])return false;                                  // uncovers a hidden layer
+        if(caps[j]===G.C&&ns[j].length===G.C&&ns[j].every(u=>u.c===c))return false; // corks a bottle
+        const k=key(ns);if(seen.has(k))continue;seen.add(k);
+        if(seen.size>5000)return false;                                        // too big to be sure; assume not stuck
+        queue.push(ns)}}
+  }
+  return true;
+}
+function checkStuck(){}
+
+/* Boosters */
+const GIFT_EVERY=5,GIFT_ORDER=['undo','shuffle','add'];
+const iconOf=k=>$({undo:'bUndo',shuffle:'bShuffle',add:'bAdd'}[k]).querySelector('svg').outerHTML;
+/* boosters: use one from the inventory, or confirm a coin purchase first */
+function need(k,then){
+  if(save.inv[k]>0){then();return}
+  const ok=save.coins>=PRICES[k];
+  showCard(`<div class="buy"><div class="buy-icon">${iconOf(k)}<span>+1</span></div>
+    <button class="big buy-btn" id="bYes" ${ok?'':'disabled'}>${COIN_SVG}${PRICES[k]}</button>
+    <div class="buy-bal">${COIN_SVG}${save.coins}</div>
+    <button class="plain buy-no" id="bNo" aria-label="Cancel">✕</button></div>`,true,()=>{
+    $('bNo').onclick=hideCard;
+    $('bYes').onclick=()=>{if(save.coins<PRICES[k])return;save.coins-=PRICES[k];save.inv[k]++;persist();hideCard();renderHUD();then()};
+  });
+}
+function charge(k){save.inv[k]=Math.max(0,save.inv[k]-1);G.boosted=true}
+function boostUndo(){
+  if(busy||!G)return;if(anims){idleQueue.push(boostUndo);return}
+  if(!G.undo.length){toast(G.corkBlock?'Corked bottles can’t be undone':'Nothing to undo');return}
+  need('undo',()=>{if(!G.undo.length)return;
+    const snap=G.undo.pop();G.bottles.forEach(b=>{b.units=snap[b.id]?snap[b.id].slice():[]});
+    charge('undo');G.sel=null;render();persist()});
+}
+function boostShuffle(){
+  if(busy||!G)return;if(anims){idleQueue.push(boostShuffle);return}
+  if(mode==='shuffle'){mode=null;render();return}
+  if(!G.bottles.some(shufflable)){toast('No bottle has layers to shuffle');return}
+  need('shuffle',()=>{G.sel=null;mode='shuffle';render();toast('Tap a glowing bottle to shuffle its layers')});
+}
+/* a bottle can be shuffled if it has 2+ layers; visible same-color runs count as one, hidden layers always count
+   separately (so the glow never gives away what's hidden) */
+function shufflable(b){return selectable(b)&&!b.gone&&!active[b.id]&&layerGroups(b).length>1}
+function doShuffle(b){
+  mode=null;
+  if(!shufflable(b)){render();return}
+  const groups=layerGroups(b);
+  const before=b.units.map(u=>u.c).join();let tries=0;
+  do{for(let i=groups.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[groups[i],groups[j]]=[groups[j],groups[i]]}
+    b.units=groups.flatMap(g=>g.us)}
+  while(b.units.map(u=>u.c).join()===before&&++tries<20);
+  charge('shuffle');revealTop(b);G.undo=[];G.corkBlock=false;G.sel=null;maybeCork(b);
+  render();const e=elFor(b.id);e&&e.classList.add('wobble');persist();checkWin();
+}
+function boostAdd(){
+  if(busy||!G)return;if(anims){idleQueue.push(boostAdd);return}
+  if(G.added>=2){toast('You can add 2 bottles per level');return}
+  need('add',()=>{if(G.added>=2)return;
+  const id=G.bottles.length;G.bottles.push({id,cap:G.C,kind:'extra',lock:null,open:false,corked:false,freeLocked:false,units:[],reveal:G.C});
+  let at=G.cells.findIndex(c=>byId(c[0]).kind==='free');if(at<0)at=G.cells.length;G.cells.splice(at,0,[id]);
+  G.added++;charge('add');render();persist();toast('Empty bottle added')});
+}
+
+/* UI chrome */
+let toastT;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1800)}
+let cardDismiss=true;
+function showCard(html,dismiss=true,after){$('card').innerHTML=html;cardDismiss=dismiss;$('veil').hidden=false;after&&after()}
+function hideCard(){$('veil').hidden=true}
+$('veil').addEventListener('click',e=>{if(e.target.id==='veil'&&cardDismiss)hideCard()});
+function openMenu(){
+  showCard(`<h2>Water Match</h2>
+    <ul class="rules">
+      <li>Tap a bottle, then tap another to pour. You can only pour onto the <b>same color</b> or into an <b>empty</b> bottle.</li>
+      <li>A bottle full of one color gets <b>corked</b>. Corked moves can’t be undone.</li>
+      <li><b>?</b> layers show once the layers above them are poured off.</li>
+      <li><b>Frozen</b> bottles shatter after you cork the shown number of bottles in the badge’s color.</li>
+      <li><b>Bagged</b> bottles open after the shown number of bottles of any color are corked.</li>
+    </ul>
+    <button class="big" id="mRestart">Restart level</button>
+    <div class="row"><input id="mLevel" type="number" min="1" inputmode="numeric" value="${G?G.L:1}" aria-label="Level number"><button class="plain" id="mGo">Play level</button></div>
+    <button class="plain danger" id="mReset">Reset progress</button>
+    <button class="plain" id="mClose">Close</button>`,true,()=>{
+      $('mRestart').onclick=()=>{hideCard();whenIdle(()=>newGame(G.L))};
+      $('mGo').onclick=()=>{const v=Math.max(1,Math.min(9999,parseInt($('mLevel').value)||1));save.level=v;hideCard();whenIdle(()=>newGame(v))};
+      $('mReset').onclick=e=>{if(e.target.dataset.arm){save={level:1,coins:150,inv:{undo:3,shuffle:1,add:1},game:null};hideCard();newGame(1)}else{e.target.dataset.arm=1;e.target.textContent='Tap again to erase coins and level'}};
+      $('mClose').onclick=hideCard;
+    });
+}
+board.addEventListener('click',e=>{const s=e.target.closest('.slot');if(s)onTap(+s.dataset.id)});
+board.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.classList.contains('slot')){e.preventDefault();onTap(+e.target.dataset.id)}});
+$('bUndo').onclick=boostUndo;$('bShuffle').onclick=boostShuffle;$('bAdd').onclick=boostAdd;
+$('menuBtn').onclick=openMenu;
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(G&&!busy)render()},120)});
+
+const usesRetired=g=>g.bottles.some(b=>b.units.some(x=>PALETTE[x.c]?.retired));
+if(save.game&&save.game.L===save.level&&!usesRetired(save.game)){G=save.game;G.sel=null;render()}else newGame(save.level);
+</script>
+</body></html>
